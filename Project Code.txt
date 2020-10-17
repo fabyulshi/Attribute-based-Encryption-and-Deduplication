@@ -1,0 +1,121 @@
+#Code for the Deduplication and Attribute based Encryption:
+#Deduplication Code
+if(isset($_POST["upload"])) {
+	//$target="E:/users/Desktop/Enfile/";
+	//$key="my secret key";
+	$target_dir = "E:/users/Desktop/server/";
+	$target_file = $target_dir . basename($_FILES["fileToUpload"]["name"]);
+	$filename=basename($_FILES["fileToUpload"]["name"]);
+	//ncryptFile($filename,$key,$target.$filename.'.enc');
+	//$file=$target.basename();
+	$uploadOk = 1;
+	$FileType = strtolower(pathinfo($target_file,PATHINFO_EXTENSION));
+	$email=$_SESSION['email'];
+    $attribute1=$_POST['attribute'];  
+	$atr="";  
+	foreach($attribute1 as $atr1) {
+      $atr .= $atr1." ";  
+   }
+	$insert="INSERT INTO `dataprovider`(`sender_name`,`file_name`, `file_type`, `attributes`) VALUES ('$email','$filename','$FileType','$atr')";
+	$qry = mysqli_query($conn, $insert);
+    $check = filesize($_FILES["fileToUpload"]["tmp_name"]);
+    if($check !== false) {
+        echo "<script>alert('It is a valid File')</script>";
+        $uploadOk = 1;
+    } else {
+        echo "<script>alert('It is not a valid File.')</script>";
+        $uploadOk = 0;
+    }
+	if (file_exists($target_file)) {
+    	echo "<script>alert('Sorry, file already exists.')</script>";
+    	$uploadOk = 0;
+	}
+	if ($_FILES["fileToUpload"]["size"] > 50000000) {
+    	echo "<script>alert('Sorry, your file is too large.')</script>";
+    	$uploadOk = 0;
+	}
+	if($FileType != "txt" && $FileType !="enc") {
+    	echo "<script>alert('Sorry, only JPG, JPEG, PNG, GIF, TXT & PDF files are allowed.')</script>";
+    	$uploadOk = 0;
+	}
+	if ($uploadOk == 0) {
+    	echo "<script>alert('Sorry, your file was not uploaded.')</script>";
+	} 
+	else {
+    	if (move_uploaded_file($_FILES["fileToUpload"]["tmp_name"], $target_file)) {
+        	echo "<script>alert('The file has been uploaded.')</script>";
+    	} else {
+        	echo "<script>alert('Sorry, there was an error uploading your file.')</script>";
+    	}
+	}
+}
+#Attribute based Encryption
+<form action='' method='post' enctype='multipart/form-data'><center><font size=100>Attribute Based Deduplication Encryption</font></center><br>\
+					<font size=5>Attributes to be Selected:</font><br>\
+					<input type='checkbox' name='attribute[]' value='Germany'> Germany<br>\
+					<input type='checkbox' name='attribute[]' value='Switerland' > Switerland<br>\
+					<input type='checkbox' name='attribute[]' value='US' > US<br>\
+					Select File to upload:\
+					<input type='file' name='fileToUpload' id='fileToUpload'><br>\
+					Upload the File:<br>\
+					<input type='submit' value='Upload File' name='upload'>
+#AES Encryption
+define('FILE_ENCRYPTION_BLOCKS', 10000);
+
+function encryptFile($source, $key, $dest)
+{
+    $key = substr(sha1($key, true), 0, 16);
+    $iv = openssl_random_pseudo_bytes(16);
+
+    $error = false;
+    if ($fpOut = fopen($dest, 'w')) {
+        // Put the initialzation vector to the beginning of the file
+        fwrite($fpOut, $iv);
+        if ($fpIn = fopen($source, 'rb')) {
+            while (!feof($fpIn)) {
+                $plaintext = fread($fpIn, 16 * FILE_ENCRYPTION_BLOCKS);
+                $ciphertext = openssl_encrypt($plaintext, 'AES-128-CBC', $key, OPENSSL_RAW_DATA, $iv);
+                // Use the first 16 bytes of the ciphertext as the next initialization vector
+                $iv = substr($ciphertext, 0, 16);
+                fwrite($fpOut, $ciphertext);
+            }
+            fclose($fpIn);
+        } else {
+            $error = true;
+        }
+        fclose($fpOut);
+    } else {
+        $error = true;
+    }
+
+    return $error ? false : $dest;
+}
+#Decryption code
+function decryptFile($source, $key, $dest)
+{
+    $key = substr(sha1($key, true), 0, 16);
+
+    $error = false;
+    if ($fpOut = fopen($dest, 'w')) {
+        if ($fpIn = fopen($source, 'rb')) {
+            // Get the initialzation vector from the beginning of the file
+            $iv = fread($fpIn, 16);
+            while (!feof($fpIn)) {
+                $ciphertext = fread($fpIn, 16 * (FILE_ENCRYPTION_BLOCKS + 1)); 
+                // we have to read one block more for decrypting than for encrypting
+                $plaintext = openssl_decrypt($ciphertext, 'AES-128-CBC', $key, OPENSSL_RAW_DATA, $iv);
+                // Use the first 16 bytes of the ciphertext as the next initialization vector
+                $iv = substr($ciphertext, 0, 16);
+                fwrite($fpOut, $plaintext);
+            }
+            fclose($fpIn);
+        } else {
+            $error = true;
+        }
+        fclose($fpOut);
+    } else {
+        $error = true;
+    }
+
+    return $error ? false : $dest;
+}
